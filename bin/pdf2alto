@@ -1,0 +1,7 @@
+#!/bin/bash
+CLASSPATH="$CLASSPATH:/path/to/pdfbox-app-1.7.0.jar"
+PDF="$1"
+DIR=`dirname "$PDF"`
+BASE=`basename "$PDF" .pdf`
+ALTO="$DIR/$BASE.xml"
+java -cp $CLASSPATH org.apache.pdfbox.examples.util.PrintWordLocations "$PDF" > "$ALTO"
