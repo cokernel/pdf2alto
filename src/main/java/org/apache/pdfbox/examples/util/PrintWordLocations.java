@@ -42,64 +42,149 @@ import java.util.regex.Pattern;
  */
 public class PrintWordLocations extends PDFTextStripper
 {
-    public class WordBox
+    public class WordBoxEmitter
     {
-      public float _xmin;
-      public float _ymin;
-      public float _fontsize;
-      public float _xscale;
-      public float _yscale;
-      public float _height;
-      public float _width;
+        protected LinkedList<WordBox> box_list = new LinkedList<WordBox>();
+        protected Character last_character = new Character('\0');
+        protected StringBuffer word = new StringBuffer("");
 
-      public WordBox(TextPosition text)
-      {
-          _xmin     = text.getXDirAdj();
-          _ymin     = text.getYDirAdj();
-          _fontsize = text.getFontSize();
-          _xscale   = text.getXScale();
-          _yscale   = text.getYScale();
-          _height   = text.getHeightDir();
-          _width    = text.getWidthDirAdj();
-      }
+        protected boolean endsWord(char ch)
+        {
+            return !(isAlnumOrApostrophe(ch) || isHyphen(ch));
+        }
+    
+        protected boolean isAlnumOrApostrophe(char ch)
+        {
+            return Character.isLetterOrDigit(ch) || (ch == '\'');
+        }
+    
+        protected boolean isHyphen(char ch)
+        {
+            return ch == '-';
+        }
 
-      public boolean rejects(TextPosition text)
-      {
-          return (text.getXDirAdj() < _xmin) ||
-                 (text.getYDirAdj() + text.getWidthOfSpace() < _ymin);
-      }
+        protected void emit()
+        {
+            float pointsToInch1200 = (float)16.6666; 
+            float mysteryHeightScale = (float)1.5;
+            float height;
+            float width;
+            float hpos;
+            float vpos;
+    
+            if (word.toString().trim().length() > 0) {
+                for (WordBox wordbox : box_list) {
+                    width = wordbox._width * pointsToInch1200;
+                    height = wordbox._height * pointsToInch1200 * mysteryHeightScale;
+                    hpos = wordbox._xmin * pointsToInch1200;
+                    vpos = wordbox._ymin * pointsToInch1200 - height;
+    
+                    System.out.println( "<String HEIGHT=\""  + height +
+                                             "\" WIDTH=\""   + width  +
+                                             "\" HPOS=\""    + hpos   +
+                                             "\" VPOS=\""    + vpos   +
+                                             "\" CONTENT=\"" + word.toString().trim() +
+                                             "\"/>" );
+                }
+            }
+            word = new StringBuffer("");
+            last_character = new Character('\0');
+            box_list.clear();
+        }
 
-      public boolean accepts(TextPosition text) {
-          return !rejects(text);
-      }
+        protected void processTextPosition( TextPosition text )
+        {
+            Character current_character = text.getCharacter().toLowerCase().charAt(0);
+    
+            if (endsWord(current_character)) {
+                emit();
+            }
+            else {
+                if (box_list.size() == 0) {
+                    box_list.push(new WordBox(text));
+                }
+                else if (box_list.getLast().accepts(text)) {
+                    box_list.getLast().extendBy(text);
+                }
+                else {
+                    if (!isHyphen(last_character)) {
+                        emit();
+                    }
+                    box_list.push(new WordBox(text));
+                }
 
-      public void extendBy(TextPosition text)
-      {
-          float current_xmin = _xmin;
-          float current_xmax = _xmin + _width;
-          float current_ymin = _ymin;
-          float current_ymax = _ymin + _height;
+                if (isAlnumOrApostrophe(current_character)) {
+                    word = word.append(current_character);
+                }
+            }
+    
+            last_character = current_character;
+        }
 
-          float text_xmin    = text.getXDirAdj();
-          float text_xmax    = text_xmin          + text.getWidthDirAdj();
-          float text_ymin    = text.getYDirAdj();
-          float text_ymax    = text_ymin          + text.getHeightDir();
-
-          float new_xmin     = Math.min(current_xmin, text_xmin);
-          float new_xmax     = Math.max(current_xmax, text_xmax);
-          float new_ymin     = Math.min(current_ymin, text_ymin);
-          float new_ymax     = Math.max(current_ymax, text_ymax);
-
-          _xmin   = new_xmin;
-          _width  = new_xmax - new_xmin;
-          _ymin   = new_ymin;
-          _height = new_ymax - new_ymin;
-       }
+        protected void endOfPage()
+        {
+            if (box_list.size() > 0) {
+                emit();
+            }
+        }
     }
 
-    protected StringBuffer word = new StringBuffer("");
-    protected Character last_character = new Character('\0');
-    protected LinkedList<WordBox> box_list = new LinkedList<WordBox>();
+    public class WordBox
+    {
+        public float _xmin;
+        public float _ymin;
+        public float _fontsize;
+        public float _xscale;
+        public float _yscale;
+        public float _height;
+        public float _width;
+  
+        public WordBox(TextPosition text)
+        {
+            _xmin     = text.getXDirAdj();
+            _ymin     = text.getYDirAdj();
+            _fontsize = text.getFontSize();
+            _xscale   = text.getXScale();
+            _yscale   = text.getYScale();
+            _height   = text.getHeightDir();
+            _width    = text.getWidthDirAdj();
+        }
+  
+        public boolean rejects(TextPosition text)
+        {
+            return (text.getXDirAdj() < _xmin) ||
+                   (text.getYDirAdj() + text.getWidthOfSpace() < _ymin);
+        }
+  
+        public boolean accepts(TextPosition text) {
+            return !rejects(text);
+        }
+  
+        public void extendBy(TextPosition text)
+        {
+            float current_xmin = _xmin;
+            float current_xmax = _xmin + _width;
+            float current_ymin = _ymin;
+            float current_ymax = _ymin + _height;
+  
+            float text_xmin    = text.getXDirAdj();
+            float text_xmax    = text_xmin          + text.getWidthDirAdj();
+            float text_ymin    = text.getYDirAdj();
+            float text_ymax    = text_ymin          + text.getHeightDir();
+  
+            float new_xmin     = Math.min(current_xmin, text_xmin);
+            float new_xmax     = Math.max(current_xmax, text_xmax);
+            float new_ymin     = Math.min(current_ymin, text_ymin);
+            float new_ymax     = Math.max(current_ymax, text_ymax);
+  
+            _xmin   = new_xmin;
+            _width  = new_xmax - new_xmin;
+            _ymin   = new_ymin;
+            _height = new_ymax - new_ymin;
+        }
+    }
+
+    protected WordBoxEmitter emitter = new WordBoxEmitter();
 
     /**
      * Default constructor.
@@ -189,93 +274,14 @@ public class PrintWordLocations extends PDFTextStripper
      */
     protected void processTextPosition( TextPosition text )
     {
-        Character current_character = text.getCharacter().toLowerCase().charAt(0);
-
-        if (endsWord(current_character)) {
-            emitWordBoxes();
-        }
-        else {
-            if (box_list.size() == 0) {
-                if (isAlnumOrApostrophe(current_character)) {
-                    word = word.append(current_character);
-                }
-
-                box_list.push(new WordBox(text));
-            }
-            else if (box_list.getLast().accepts(text)) {
-                if (isAlnumOrApostrophe(current_character)) {
-                    word = word.append(current_character);
-                }
-
-                box_list.getLast().extendBy(text);
-            }
-            else {
-                if (!isHyphen(last_character)) {
-                    emitWordBoxes();
-                }
-
-                if (isAlnumOrApostrophe(current_character)) {
-                    word = word.append(current_character);
-                }
-   
-                box_list.push(new WordBox(text));
-            }
-        }
-
-        last_character = current_character;
+        emitter.processTextPosition(text);
     }
 
     protected void endOfPage()
     {
-        if (box_list.size() > 0) {
-            emitWordBoxes();
-        }
+        emitter.endOfPage();
     }
     
-    protected void emitWordBoxes()
-    {
-        float pointsToInch1200 = (float)16.6666; 
-        float mysteryHeightScale = (float)1.5;
-        float height;
-        float width;
-        float hpos;
-        float vpos;
-
-        if (word.toString().trim().length() > 0) {
-            for (WordBox wordbox : box_list) {
-                width = wordbox._width * pointsToInch1200;
-                height = wordbox._height * pointsToInch1200 * mysteryHeightScale;
-                hpos = wordbox._xmin * pointsToInch1200;
-                vpos = wordbox._ymin * pointsToInch1200 - height;
-
-                System.out.println( "<String HEIGHT=\""  + height +
-                                         "\" WIDTH=\""   + width  +
-                                         "\" HPOS=\""    + hpos   +
-                                         "\" VPOS=\""    + vpos   +
-                                         "\" CONTENT=\"" + word.toString().trim() +
-                                         "\"/>" );
-            }
-        }
-        word = new StringBuffer("");
-        last_character = new Character('\0');
-        box_list.clear();
-    }
-
-    protected boolean endsWord(char ch)
-    {
-        return !(isAlnumOrApostrophe(ch) || isHyphen(ch));
-    }
-
-    protected boolean isAlnumOrApostrophe(char ch)
-    {
-        return Character.isLetterOrDigit(ch) || (ch == '\'');
-    }
-
-    protected boolean isHyphen(char ch)
-    {
-        return ch == '-';
-    }
-
     /**
      * This will print the usage for this document.
      */
