@@ -24,6 +24,7 @@ import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.common.PDStream;
 import org.apache.pdfbox.util.PDFTextStripper;
 import org.apache.pdfbox.util.TextPosition;
+import org.apache.pdfbox.pdmodel.common.PDRectangle;
 
 import java.io.IOException;
 
@@ -42,11 +43,39 @@ import java.util.regex.Pattern;
  */
 public class PrintWordLocations extends PDFTextStripper
 {
+    public class MarginOffset
+    {
+        protected float _dx;
+        protected float _dy;
+
+        public MarginOffset(float dx, float dy)
+        {
+            _dx = dx;
+            _dy = dy;
+        }
+
+        public float getX()
+        {
+            return _dx;
+        }
+
+        public float getY()
+        {
+            return _dy;
+        }
+    }
+
     public class WordBoxEmitter
     {
         protected LinkedList<WordBox> box_list = new LinkedList<WordBox>();
         protected Character last_character = new Character('\0');
         protected StringBuffer word = new StringBuffer("");
+        protected MarginOffset _offset = new MarginOffset(0, 0);
+
+        public void setOffset(MarginOffset offset)
+        {
+            _offset = offset;
+        }
 
         protected boolean endsWord(char ch)
         {
@@ -76,8 +105,8 @@ public class PrintWordLocations extends PDFTextStripper
                 for (WordBox wordbox : box_list) {
                     width = wordbox._width * pointsToInch1200;
                     height = wordbox._height * pointsToInch1200 * mysteryHeightScale;
-                    hpos = wordbox._xmin * pointsToInch1200;
-                    vpos = wordbox._ymin * pointsToInch1200 - height;
+                    hpos = (wordbox._xmin + _offset.getX()) * pointsToInch1200;
+                    vpos = (wordbox._ymin + _offset.getY()) * pointsToInch1200 - height;
     
                     System.out.println( "<String HEIGHT=\""  + height +
                                              "\" WIDTH=\""   + width  +
@@ -92,9 +121,10 @@ public class PrintWordLocations extends PDFTextStripper
             box_list.clear();
         }
 
-        protected void processTextPosition( TextPosition text )
+        protected void processTextPosition(TextPosition text, MarginOffset offset)
         {
             Character current_character = text.getCharacter().toLowerCase().charAt(0);
+            setOffset(offset);
     
             if (endsWord(current_character)) {
                 emit();
@@ -185,6 +215,7 @@ public class PrintWordLocations extends PDFTextStripper
     }
 
     protected WordBoxEmitter emitter = new WordBoxEmitter();
+    protected MarginOffset _offset = new MarginOffset(0, 0);
 
     /**
      * Default constructor.
@@ -194,6 +225,11 @@ public class PrintWordLocations extends PDFTextStripper
     public PrintWordLocations() throws IOException
     {
         super.setSortByPosition( true );
+    }
+
+    public void setOffset(MarginOffset offset)
+    {
+        _offset = offset;
     }
 
     public void processDocuments( String[] args ) throws Exception
@@ -226,6 +262,16 @@ public class PrintWordLocations extends PDFTextStripper
                 for( int i=0; i<allPages.size(); i++ )
                 {
                     PDPage page = (PDPage)allPages.get( i );
+
+                    if (page.getCropBox() != null) {
+                        PDRectangle mediaBox = (PDRectangle)page.getMediaBox();
+                        PDRectangle cropBox = (PDRectangle)page.getCropBox();
+                        printer.setOffset(new MarginOffset(
+                            cropBox.getLowerLeftX() - mediaBox.getLowerLeftX(),
+                            cropBox.getLowerLeftY() - mediaBox.getLowerLeftY()
+                        ));
+                    }
+
                     System.out.println( "<Page>" );
                     System.out.println( "<PrintSpace>" );
                     System.out.println( "<TextBlock>" );
@@ -274,7 +320,7 @@ public class PrintWordLocations extends PDFTextStripper
      */
     protected void processTextPosition( TextPosition text )
     {
-        emitter.processTextPosition(text);
+        emitter.processTextPosition(text, _offset);
     }
 
     protected void endOfPage()
