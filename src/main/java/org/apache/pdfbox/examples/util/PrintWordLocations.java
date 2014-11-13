@@ -100,7 +100,7 @@ public class PrintWordLocations extends PDFTextStripper
             float width;
             float hpos;
             float vpos;
-    
+
             if (word.toString().trim().length() > 0) {
                 for (WordBox wordbox : box_list) {
                     width = wordbox._width * pointsToInch1200;
@@ -131,7 +131,7 @@ public class PrintWordLocations extends PDFTextStripper
             }
             else {
                 if (box_list.size() == 0) {
-                    box_list.push(new WordBox(text));
+                    box_list.addLast(new WordBox(text));
                 }
                 else if (box_list.getLast().accepts(text)) {
                     box_list.getLast().extendBy(text);
@@ -139,10 +139,14 @@ public class PrintWordLocations extends PDFTextStripper
                 else {
                     if (!isHyphen(last_character)) {
                         emit();
-                    }
-                    box_list.push(new WordBox(text));
+		    }
+                    box_list.addLast(new WordBox(text));
+                    last_character = new Character('\0');
                 }
 
+                if (isHyphen(last_character)) {
+                    word = word.append(last_character);
+                }
                 if (isAlnumOrApostrophe(current_character)) {
                     word = word.append(current_character);
                 }
@@ -179,7 +183,7 @@ public class PrintWordLocations extends PDFTextStripper
             _height   = text.getHeightDir();
             _width    = text.getWidthDirAdj();
         }
-  
+ 
         public boolean rejects(TextPosition text)
         {
             return (text.getXDirAdj() < _xmin) ||
